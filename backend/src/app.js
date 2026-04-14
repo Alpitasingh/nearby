@@ -19,26 +19,27 @@ app.use(helmet());
 // ── CORS (🔥 FINAL WORKING FIX) ───────────────────────────
 const allowedOrigins = [
   "http://localhost:5173",
-  "http://localhost:3000"
+  "http://localhost:3000",
+  "https://nearby-three.vercel.app"
 ];
 
 app.use(cors({
-  origin: (origin, callback) => {
-    // allow requests like Postman or same-origin
+  origin: function (origin, callback) {
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
+      return callback(null, origin); // ✅ IMPORTANT FIX
     }
 
-    return callback(null, true); // 🔥 IMPORTANT: don't block (fixes your issue)
+    return callback(new Error("Not allowed by CORS")); // ❌ block unknown
   },
   credentials: true,
 }));
-
 // 🔥 HANDLE PREFLIGHT (VERY IMPORTANT)
-app.options('*', cors());
-
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 // ── Rate limiting ─────────────────────────────────────────
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
