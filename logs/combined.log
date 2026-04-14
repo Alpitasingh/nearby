@@ -1,0 +1,9 @@
+03:18:23 [[32minfo[39m]: MongoDB connected: ac-b6kctk5-shard-00-00.jf0yaqe.mongodb.net
+03:18:23 [[32minfo[39m]: Server running in undefined mode on port 5000
+03:20:56 [[32minfo[39m]: SIGINT received — shutting down gracefully
+03:21:00 [[32minfo[39m]: MongoDB connected: ac-b6kctk5-shard-00-00.jf0yaqe.mongodb.net
+03:21:00 [[32minfo[39m]: Server running in undefined mode on port 5000
+03:25:36 [[32mhttp[39m]: ::1 - - [13/Apr/2026:21:55:36 +0000] "GET / HTTP/1.1" 404 52 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+03:25:37 [[32mhttp[39m]: ::1 - - [13/Apr/2026:21:55:37 +0000] "GET /favicon.ico HTTP/1.1" 404 63 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+03:26:21 [[32mhttp[39m]: ::1 - - [13/Apr/2026:21:56:21 +0000] "GET /api/auth/register HTTP/1.1" 404 69 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+04:02:50 [[32minfo[39m]: SIGINT received — shutting down gracefully
