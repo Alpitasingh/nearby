@@ -17,22 +17,37 @@ export default function Register() {
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!form.firstName || !form.email || !form.password) {
-      toast("Please fill all required fields", "error"); return;
-    }
-    if (form.password.length < 6) { toast("Password must be at least 6 characters", "error"); return; }
-    setLoading(true);
-    try {
-      await register(form);
-      toast("Welcome to Taskly! Account created 🎉", "success");
-      navigate("/");
-    } catch {
-      toast("Registration failed. Please try again.", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
+  e.preventDefault();
+
+  if (!form.firstName || !form.email || !form.password) {
+    toast("Please fill all required fields", "error");
+    return;
+  }
+
+  if (form.password.length < 6) {
+    toast("Password must be at least 6 characters", "error");
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    await register({
+      name: `${form.firstName} ${form.lastName || ""}`.trim(),
+      email: form.email,
+      password: form.password,
+      role: form.role,
+    });
+
+    toast("Welcome to Taskly! Account created 🎉", "success");
+    navigate("/");
+  } catch (err) {
+    console.log(err.response?.data); // 🔥 debug helper
+    toast("Registration failed. Please try again.", "error");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="relative z-10 flex-1 flex items-center justify-center p-6 min-h-0 overflow-y-auto">
