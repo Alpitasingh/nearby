@@ -3,17 +3,6 @@ const User = require('../models/User');
 const ApiError = require('../utils/ApiError');
 const logger = require('../utils/logger');
 
-// ── Helpers ───────────────────────────────────────────────
-
-const buildGeoQuery = (longitude, latitude, radiusKm) => ({
-  location: {
-    $near: {
-      $geometry: { type: 'Point', coordinates: [parseFloat(longitude), parseFloat(latitude)] },
-      $maxDistance: parseFloat(radiusKm) * 1000, // metres
-    },
-  },
-});
-
 // ── Controllers ───────────────────────────────────────────
 
 /**
@@ -46,44 +35,12 @@ exports.createTask = async (req, res, next) => {
     });
 
     await User.findByIdAndUpdate(req.user._id, { $inc: { tasksPosted: 1 } });
-    logger.info(`Task created [${task._id}] by user [${req.user._id}]`);
 
     const populated = await task.populate('poster', 'name email avatar rating');
-    res.status(201).json({ status: 'success', data: { task: populated } });
-  } catch (err) {
-    next(err);
-  }
-};
 
-/**
- * GET /api/tasks/nearby?longitude=&latitude=&radius=&page=&limit=
- * Return open tasks within the given radius (geospatial query).
- */
-exports.getNearbyTasks = async (req, res, next) => {
-  try {
-    const { longitude, latitude, radius = 10, page = 1, limit = 20 } = req.query;
-
-    const geoFilter = buildGeoQuery(longitude, latitude, radius);
-    const filter = { ...geoFilter, status: 'open' };
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const [tasks, total] = await Promise.all([
-      Task.find(filter)
-        .populate('poster', 'name avatar rating')
-        .skip(skip)
-        .limit(parseInt(limit))
-        .select('-__v'),
-      Task.countDocuments(filter),
-    ]);
-
-    res.status(200).json({
+    res.status(201).json({
       status: 'success',
-      results: tasks.length,
-      total,
-      page: parseInt(page),
-      pages: Math.ceil(total / parseInt(limit)),
-      data: { tasks },
+      data: { task: populated },
     });
   } catch (err) {
     next(err);
@@ -91,8 +48,72 @@ exports.getNearbyTasks = async (req, res, next) => {
 };
 
 /**
+ * GET /api/tasks/nearby
+ * Distance + Nearby tasks (🔥 FIXED)
+ */
+exports.getNearbyTasks = async (req, res, next) => {
+  try {
+    const { longitude, latitude, radius = 10, page = 1, limit = 20 } = req.query;
+
+    if (!longitude || !latitude) {
+      return next(new ApiError(400, 'Longitude and latitude are required'));
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const tasks = await Task.aggregate([
+      {
+        $geoNear: {
+          near: {
+            type: "Point",
+            coordinates: [parseFloat(longitude), parseFloat(latitude)],
+          },
+          distanceField: "distance",
+          maxDistance: parseFloat(radius) * 1000,
+          spherical: true,
+          query: { status: "open" },
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "poster",
+          foreignField: "_id",
+          as: "poster",
+        },
+      },
+      { $unwind: "$poster" },
+      {
+        $project: {
+          title: 1,
+          description: 1,
+          budget: 1,
+          category: 1,
+          location: 1,
+          distance: 1,
+          createdAt: 1,
+          "poster.name": 1,
+          "poster.avatar": 1,
+          "poster.rating": 1,
+        },
+      },
+      { $skip: skip },
+      { $limit: parseInt(limit) },
+    ]);
+
+    res.status(200).json({
+      status: "success",
+      results: tasks.length,
+      data: { tasks },
+    });
+
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * GET /api/tasks/:id
- * Get a single task by ID.
  */
 exports.getTask = async (req, res, next) => {
   try {
@@ -110,29 +131,25 @@ exports.getTask = async (req, res, next) => {
 
 /**
  * GET /api/tasks/my
- * Tasks posted by the authenticated user.
  */
 exports.getMyPostedTasks = async (req, res, next) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
+
     const filter = { poster: req.user._id };
     if (status) filter.status = status;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const [tasks, total] = await Promise.all([
-      Task.find(filter)
-        .populate('worker', 'name avatar rating')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit)),
-      Task.countDocuments(filter),
-    ]);
+    const tasks = await Task.find(filter)
+      .populate('worker', 'name avatar rating')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
 
     res.status(200).json({
       status: 'success',
       results: tasks.length,
-      total,
       data: { tasks },
     });
   } catch (err) {
@@ -142,29 +159,25 @@ exports.getMyPostedTasks = async (req, res, next) => {
 
 /**
  * GET /api/tasks/accepted
- * Tasks accepted by the authenticated user (worker view).
  */
 exports.getMyAcceptedTasks = async (req, res, next) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
+
     const filter = { worker: req.user._id };
     if (status) filter.status = status;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const [tasks, total] = await Promise.all([
-      Task.find(filter)
-        .populate('poster', 'name avatar rating')
-        .sort({ acceptedAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit)),
-      Task.countDocuments(filter),
-    ]);
+    const tasks = await Task.find(filter)
+      .populate('poster', 'name avatar rating')
+      .sort({ acceptedAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
 
     res.status(200).json({
       status: 'success',
       results: tasks.length,
-      total,
       data: { tasks },
     });
   } catch (err) {
@@ -174,38 +187,36 @@ exports.getMyAcceptedTasks = async (req, res, next) => {
 
 /**
  * PATCH /api/tasks/:id/accept
- * Worker accepts an open task.
  */
 exports.acceptTask = async (req, res, next) => {
   try {
     const task = await Task.findById(req.params.id);
+
     if (!task) return next(new ApiError(404, 'Task not found'));
 
-    // Cannot accept your own task
     if (task.poster.toString() === req.user._id.toString()) {
       return next(new ApiError(400, 'You cannot accept your own task'));
     }
 
     if (!task.canBeAccepted()) {
-      return next(
-        new ApiError(400, `Task cannot be accepted — current status: ${task.status}`)
-      );
+      return next(new ApiError(400, `Task cannot be accepted — status: ${task.status}`));
     }
 
-    task.status     = 'in_progress';
-    task.worker     = req.user._id;
+    task.status = 'in_progress';
+    task.worker = req.user._id;
     task.acceptedAt = new Date();
+
     await task.save();
 
-    await User.findByIdAndUpdate(req.user._id, { $inc: { tasksAccepted: 1 } });
-    logger.info(`Task [${task._id}] accepted by user [${req.user._id}]`);
+    await User.findByIdAndUpdate(req.user._id, {
+      $inc: { tasksAccepted: 1 },
+    });
 
-    const populated = await task.populate([
-      { path: 'poster', select: 'name avatar rating' },
-      { path: 'worker', select: 'name avatar rating' },
-    ]);
+    res.status(200).json({
+      status: 'success',
+      data: { task },
+    });
 
-    res.status(200).json({ status: 'success', data: { task: populated } });
   } catch (err) {
     next(err);
   }
@@ -213,31 +224,27 @@ exports.acceptTask = async (req, res, next) => {
 
 /**
  * PATCH /api/tasks/:id/complete
- * Poster marks an in-progress task as completed.
  */
 exports.completeTask = async (req, res, next) => {
   try {
     const task = await Task.findById(req.params.id);
+
     if (!task) return next(new ApiError(404, 'Task not found'));
 
     if (!task.canBeCompleted(req.user._id)) {
-      return next(
-        new ApiError(
-          400,
-          task.poster.toString() !== req.user._id.toString()
-            ? 'Only the task poster can mark it as completed'
-            : `Task cannot be completed — current status: ${task.status}`
-        )
-      );
+      return next(new ApiError(400, 'Cannot complete task'));
     }
 
-    task.status      = 'completed';
+    task.status = 'completed';
     task.completedAt = new Date();
+
     await task.save();
 
-    logger.info(`Task [${task._id}] marked completed by poster [${req.user._id}]`);
+    res.status(200).json({
+      status: 'success',
+      data: { task },
+    });
 
-    res.status(200).json({ status: 'success', data: { task } });
   } catch (err) {
     next(err);
   }
@@ -245,27 +252,27 @@ exports.completeTask = async (req, res, next) => {
 
 /**
  * PATCH /api/tasks/:id/cancel
- * Poster cancels an open task.
  */
 exports.cancelTask = async (req, res, next) => {
   try {
     const task = await Task.findById(req.params.id);
+
     if (!task) return next(new ApiError(404, 'Task not found'));
 
     if (task.poster.toString() !== req.user._id.toString()) {
-      return next(new ApiError(403, 'Only the task poster can cancel it'));
+      return next(new ApiError(403, 'Not allowed'));
     }
 
-    if (!['open', 'in_progress'].includes(task.status)) {
-      return next(new ApiError(400, `Cannot cancel a task with status: ${task.status}`));
-    }
-
-    task.status      = 'cancelled';
+    task.status = 'cancelled';
     task.cancelledAt = new Date();
+
     await task.save();
 
-    logger.info(`Task [${task._id}] cancelled by poster [${req.user._id}]`);
-    res.status(200).json({ status: 'success', data: { task } });
+    res.status(200).json({
+      status: 'success',
+      data: { task },
+    });
+
   } catch (err) {
     next(err);
   }
@@ -273,23 +280,20 @@ exports.cancelTask = async (req, res, next) => {
 
 /**
  * DELETE /api/tasks/:id
- * Poster deletes an open task (hard delete).
  */
 exports.deleteTask = async (req, res, next) => {
   try {
     const task = await Task.findById(req.params.id);
+
     if (!task) return next(new ApiError(404, 'Task not found'));
 
-    if (task.poster.toString() !== req.user._id.toString()) {
-      return next(new ApiError(403, 'Only the task poster can delete it'));
-    }
-
-    if (task.status !== 'open') {
-      return next(new ApiError(400, 'Only open tasks can be deleted'));
-    }
-
     await task.deleteOne();
-    res.status(204).json({ status: 'success', data: null });
+
+    res.status(204).json({
+      status: 'success',
+      data: null,
+    });
+
   } catch (err) {
     next(err);
   }

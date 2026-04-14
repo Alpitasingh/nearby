@@ -9,6 +9,14 @@ const URGENCY_CONFIG = {
 export default function TaskCard({ task, style = {} }) {
   const navigate = useNavigate();
   const urg = URGENCY_CONFIG[task.urgency] || URGENCY_CONFIG.low;
+  // 🔥 DISTANCE CALCULATION
+  const distanceKm = task.distance ? task.distance / 1000 : null;
+
+  const formattedDistance = distanceKm
+  ? distanceKm < 1
+    ? `${Math.round(distanceKm * 1000)} m`
+    : `${distanceKm.toFixed(1)} km`
+  : null;
 
   return (
     <div
@@ -63,13 +71,16 @@ export default function TaskCard({ task, style = {} }) {
       </h3>
 
       {/* Meta */}
+      {/* Meta */}
       <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-2 flex-wrap">
-        <span> {task.dist}</span>
-        <div className="w-[3px] h-[3px] rounded-full bg-slate-300" />
-        <span> {task.timeAgo}</span>
-        <div className="w-[3px] h-[3px] rounded-full bg-slate-300" />
-        <span> {task.offers} offers</span>
-      </div>
+  <span className="text-purple-500 font-medium">
+  {formattedDistance || task.dist}
+</span>
+  <div className="w-[3px] h-[3px] rounded-full bg-slate-300" />
+  <span>{task.timeAgo}</span>
+  <div className="w-[3px] h-[3px] rounded-full bg-slate-300" />
+  <span>{task.offers} offers</span>
+</div>
 
       {/* Footer */}
       <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">

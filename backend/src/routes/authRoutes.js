@@ -44,4 +44,12 @@ router.post('/logout', authController.logout);
  */
 router.get('/me', protect, authController.getMe);
 
+/**
+ * 🔥 NEW ROUTE ADDED
+ * @route   PUT /api/auth/update
+ * @desc    Update user profile (name, etc.)
+ * @access  Protected
+ */
+router.put('/update', protect, authController.updateProfile);
+
 module.exports = router;

@@ -2,11 +2,19 @@ const mongoose = require('mongoose');
 
 /**
  * GeoJSON point for task location.
- * MongoDB 2dsphere index enables $near / $geoWithin queries.
+ * MongoDB 2dsphere index enables $near / $geoNear queries.
  */
 const pointSchema = new mongoose.Schema({
-  type:        { type: String, enum: ['Point'], required: true, default: 'Point' },
-  coordinates: { type: [Number], required: true }, // [longitude, latitude]
+  type: {
+    type: String,
+    enum: ['Point'],
+    required: true,
+    default: 'Point',
+  },
+  coordinates: {
+    type: [Number], // [longitude, latitude]
+    required: true,
+  },
 });
 
 const STATUSES = ['open', 'in_progress', 'completed', 'cancelled'];
@@ -40,20 +48,19 @@ const taskSchema = new mongoose.Schema(
       maxlength: 3,
     },
 
-    // ── Location ─────────────────────────────────────────
+    // ── Location (🔥 IMPORTANT FOR DISTANCE) ─────────────
     location: {
       type: pointSchema,
       required: [true, 'Location is required'],
-      index: '2dsphere',
     },
     address: {
       type: String,
       trim: true,
       maxlength: 255,
     },
+
     /**
-     * Search radius in kilometres.
-     * Only workers within this radius can see the task in geo queries.
+     * Radius (km) — used for filtering nearby tasks
      */
     radius: {
       type: Number,
@@ -81,9 +88,9 @@ const taskSchema = new mongoose.Schema(
       enum: STATUSES,
       default: 'open',
     },
-    acceptedAt:   { type: Date, default: null },
-    completedAt:  { type: Date, default: null },
-    cancelledAt:  { type: Date, default: null },
+    acceptedAt: { type: Date, default: null },
+    completedAt: { type: Date, default: null },
+    cancelledAt: { type: Date, default: null },
 
     // ── Extra metadata ────────────────────────────────────
     category: {
@@ -92,7 +99,7 @@ const taskSchema = new mongoose.Schema(
       maxlength: 50,
     },
     tags: [{ type: String, trim: true, maxlength: 30 }],
-    images: [{ type: String }], // URLs
+    images: [{ type: String }],
   },
   {
     timestamps: true,
@@ -100,21 +107,23 @@ const taskSchema = new mongoose.Schema(
   }
 );
 
-// ── Indexes ───────────────────────────────────────────────
+// ── 🔥 CRITICAL INDEX (DON'T REMOVE) ──────────────────────
+taskSchema.index({ location: '2dsphere' });
+
+// ── Other indexes ─────────────────────────────────────────
 taskSchema.index({ status: 1 });
 taskSchema.index({ poster: 1 });
 taskSchema.index({ worker: 1 });
 taskSchema.index({ createdAt: -1 });
-taskSchema.index({ location: '2dsphere' }); // geo queries
 
-// ── Virtual: duration in hours (in_progress tasks) ────────
+// ── Virtual: duration in hours ────────────────────────────
 taskSchema.virtual('durationHours').get(function () {
   if (!this.acceptedAt) return null;
   const end = this.completedAt || new Date();
   return ((end - this.acceptedAt) / 36e5).toFixed(1);
 });
 
-// ── Guard: only open tasks can be accepted ────────────────
+// ── Methods ───────────────────────────────────────────────
 taskSchema.methods.canBeAccepted = function () {
   return this.status === 'open';
 };

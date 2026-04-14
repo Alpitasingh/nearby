@@ -7,78 +7,93 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // 🔥 LOAD USER (AUTO LOGIN)
   useEffect(() => {
-    const stored = localStorage.getItem("taskly_user");
     const token = localStorage.getItem("taskly_token");
-    if (stored && token) {
-      try { setUser(JSON.parse(stored)); } catch { /* ignore */ }
+
+    if (!token) {
+      setLoading(false);
+      return;
     }
-    setLoading(false);
+
+    api
+      .get("/auth/me")
+      .then((res) => {
+        setUser(res.data.data.user);
+      })
+      .catch((err) => {
+        console.error("Auto login failed:", err);
+        localStorage.removeItem("taskly_token");
+        setUser(null);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
+  // 🔥 LOGIN
   const login = useCallback(async (email, password) => {
-    // Demo mode — simulate successful login
-    const mockUser = {
-      id: "u_001",
-      name: "Arjun Joshi",
-      initials: "AJ",
-      email,
-      handle: "@arjun.taskly",
-      rating: 4.9,
-      reviews: 84,
-      bio: "Full-stack dev & designer. Quick turnaround, clean code. Bengaluru-based.",
-      tasksCompleted: 47,
-      earned: 82000,
-      completionRate: 98,
-      skills: ["React", "Node.js", "UI/UX", "Python", "Figma"],
-      joinedDate: "March 2023",
-    };
-    const mockToken = "mock_jwt_" + Date.now();
-    localStorage.setItem("taskly_token", mockToken);
-    localStorage.setItem("taskly_user", JSON.stringify(mockUser));
-    setUser(mockUser);
-    return mockUser;
+    try {
+      const res = await api.post("/auth/login", { email, password });
+
+      const { accessToken, data } = res.data;
+
+      localStorage.setItem("taskly_token", accessToken);
+      setUser(data.user);
+
+      return data.user;
+    } catch (err) {
+      console.error("Login error:", err.response?.data || err.message);
+      throw err;
+    }
   }, []);
 
-  const register = useCallback(async (data) => {
-    const mockUser = {
-      id: "u_" + Date.now(),
-      name: `${data.firstName} ${data.lastName}`,
-      initials: `${data.firstName[0]}${data.lastName[0]}`.toUpperCase(),
-      email: data.email,
-      handle: `@${data.firstName.toLowerCase()}.taskly`,
-      rating: 0,
-      reviews: 0,
-      bio: "New to Taskly — excited to get started!",
-      tasksCompleted: 0,
-      earned: 0,
-      completionRate: 100,
-      skills: [],
-      joinedDate: new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
-    };
-    const mockToken = "mock_jwt_" + Date.now();
-    localStorage.setItem("taskly_token", mockToken);
-    localStorage.setItem("taskly_user", JSON.stringify(mockUser));
-    setUser(mockUser);
-    return mockUser;
+  // 🔥 REGISTER
+  const register = useCallback(async (formData) => {
+    try {
+      const res = await api.post("/auth/register", {
+        name: `${formData.firstName} ${formData.lastName}`,
+        email: formData.email,
+        password: formData.password,
+      });
+
+      const { accessToken, data } = res.data;
+
+      localStorage.setItem("taskly_token", accessToken);
+      setUser(data.user);
+
+      return data.user;
+    } catch (err) {
+      console.error("Register error:", err.response?.data || err.message);
+      throw err;
+    }
   }, []);
 
+  // 🔥 LOGOUT
   const logout = useCallback(() => {
     localStorage.removeItem("taskly_token");
-    localStorage.removeItem("taskly_user");
     setUser(null);
   }, []);
 
-  const updateUser = useCallback((updates) => {
-    setUser((prev) => {
-      const updated = { ...prev, ...updates };
-      localStorage.setItem("taskly_user", JSON.stringify(updated));
-      return updated;
-    });
+  // 🔥 UPDATE PROFILE (optional future)
+  const updateUser = useCallback(async (updates) => {
+    try {
+      const res = await api.put("/auth/update", updates);
+      setUser(res.data.data.user);
+    } catch (err) {
+      console.error("Update user error:", err.response?.data || err.message);
+    }
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        register,
+        logout,
+        updateUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -24,7 +24,7 @@ const sendTokens = (user, statusCode, res) => {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    maxAge: 30 * 24 * 60 * 60 * 1000,
   });
 
   res.status(statusCode).json({
@@ -42,6 +42,15 @@ const sendTokens = (user, statusCode, res) => {
 exports.register = async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
+
+    // 🔥 VALIDATION ADD
+    if (!name || !email || !password) {
+      return next(new ApiError(400, 'All fields are required'));
+    }
+
+    if (password.length < 6) {
+      return next(new ApiError(400, 'Password must be at least 6 characters'));
+    }
 
     const exists = await User.findOne({ email });
     if (exists) return next(new ApiError(409, 'Email already registered'));
@@ -62,7 +71,13 @@ exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
+    // 🔥 VALIDATION ADD
+    if (!email || !password) {
+      return next(new ApiError(400, 'Email and password required'));
+    }
+
     const user = await User.findOne({ email }).select('+password');
+
     if (!user || !(await user.comparePassword(password))) {
       return next(new ApiError(401, 'Invalid email or password'));
     }
@@ -80,7 +95,6 @@ exports.login = async (req, res, next) => {
 
 /**
  * POST /api/auth/refresh
- * Issues a new access token using the refresh token cookie.
  */
 exports.refreshToken = async (req, res, next) => {
   try {
@@ -89,12 +103,17 @@ exports.refreshToken = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
     const user = await User.findById(decoded.id);
+
     if (!user || !user.isActive) {
       return next(new ApiError(401, 'User not found'));
     }
 
     const accessToken = signAccessToken(user._id);
-    res.status(200).json({ status: 'success', accessToken });
+
+    res.status(200).json({
+      status: 'success',
+      accessToken,
+    });
   } catch (err) {
     if (['TokenExpiredError', 'JsonWebTokenError'].includes(err.name)) {
       return next(new ApiError(401, 'Invalid or expired refresh token. Please log in again.'));
@@ -108,7 +127,10 @@ exports.refreshToken = async (req, res, next) => {
  */
 exports.logout = (req, res) => {
   res.clearCookie('refreshToken');
-  res.status(200).json({ status: 'success', message: 'Logged out successfully' });
+  res.status(200).json({
+    status: 'success',
+    message: 'Logged out successfully',
+  });
 };
 
 /**
@@ -116,8 +138,36 @@ exports.logout = (req, res) => {
  */
 exports.getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id);
-    res.status(200).json({ status: 'success', data: { user } });
+    const user = await User.findById(req.user.id);
+    res.status(200).json({
+      status: 'success',
+      data: { user },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * 🔥 NEW: UPDATE PROFILE (IMPORTANT)
+ * PUT /api/auth/update
+ */
+exports.updateProfile = async (req, res, next) => {
+  try {
+    const { name } = req.body;
+
+    const user = await User.findById(req.user.id);
+
+    if (!user) return next(new ApiError(404, 'User not found'));
+
+    if (name) user.name = name;
+
+    await user.save();
+
+    res.status(200).json({
+      status: 'success',
+      data: { user },
+    });
   } catch (err) {
     next(err);
   }

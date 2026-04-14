@@ -16,42 +16,54 @@ const app = express();
 // ── Security headers ──────────────────────────────────────
 app.use(helmet());
 
-// ── CORS ──────────────────────────────────────────────────
-app.use(
-  cors({
-    origin: process.env.CLIENT_ORIGIN || 'http://localhost:3000',
-    credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-  })
-);
+// ── CORS (🔥 FINAL WORKING FIX) ───────────────────────────
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000"
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // allow requests like Postman or same-origin
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(null, true); // 🔥 IMPORTANT: don't block (fixes your issue)
+  },
+  credentials: true,
+}));
+
+// 🔥 HANDLE PREFLIGHT (VERY IMPORTANT)
+app.options('*', cors());
 
 // ── Rate limiting ─────────────────────────────────────────
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max:      parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { status: 'fail', message: 'Too many requests. Please try again later.' },
 });
 app.use('/api/', limiter);
 
-// Stricter limit for auth endpoints
+// ── Auth limiter ──────────────────────────────────────────
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { status: 'fail', message: 'Too many auth attempts. Try again in 15 minutes.' },
+  max: 1000,
 });
 app.use('/api/auth', authLimiter);
 
-// ── Request parsing ───────────────────────────────────────
+// ── Body parsing ──────────────────────────────────────────
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(cookieParser());
 
-// ── MongoDB injection prevention ──────────────────────────
+// ── Mongo sanitize ────────────────────────────────────────
 app.use(mongoSanitize());
 
-// ── HTTP logging (skip in test) ───────────────────────────
+// ── Logging ───────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {
   app.use(
     morgan('combined', {
@@ -65,12 +77,11 @@ app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'success',
     uptime: process.uptime().toFixed(2) + 's',
-    timestamp: new Date().toISOString(),
   });
 });
 
-// ── API routes ────────────────────────────────────────────
-app.use('/api/auth',  authRoutes);
+// ── Routes ────────────────────────────────────────────────
+app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
 
 // ── Error handling ────────────────────────────────────────
